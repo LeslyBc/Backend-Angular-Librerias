@@ -15,17 +15,22 @@ var controller = {
             .then(usuario => {
                 if (!usuario || usuario.length === 0)
                     return res.status(404).send({ message: 'No se encontaron usuarios' })
-                return res.status(200).send({ usuario })
+                const usuariosSinContrasenia = usuario.map(u => {
+                    u.contrasenia = undefined; 
+                    return u;
+                });
+                return res.status(200).send({ usuario: usuariosSinContrasenia })
             })
             .catch(err => {
                 return res.status(500).send({ message: 'Error al obtener datos', error: err });
             });
     },
 
+    // Función para obtener datos del perfil
     verUsuario: function (req, res) {
         var usuarioId = req.params.id;
 
-        Usuarios.findById(usuarioId)
+        Usuarios.findById(usuarioId).select('-contrasenia') // <-- CRÍTICO: Excluir contrasenia
             .then(usuario => {
                 if (!usuario) return res.status(404).send({ message: 'El usuario con esta ID no existe' })
                 return res.status(200).send({ usuario })
@@ -47,15 +52,20 @@ var controller = {
         usuario.cedula = params.cedula;
         usuario.correo = params.correo ? params.correo.trim().toLowerCase() : null;
 
+        // Asignamos el valor de la contraseña
         if (params.contrasenia) {
-            usuario.contrasenia = await bcrypt.hash(params.contrasenia.trim(), 10);
+            usuario.contrasenia = params.contrasenia.trim();
+        } else {
+             return res.status(400).send({ message: 'La contraseña es obligatoria' });
         }
-
+        
         usuario.imagen = null;
 
         usuario.save()
             .then(usuarioGuardado => {
                 if (!usuarioGuardado) return res.status(404).send({ message: 'No se ha guardado el usuario' })
+                // Ocultar contraseña
+                usuarioGuardado.contrasenia = undefined;
                 return res.status(200).send({ usuario: usuarioGuardado });
             })
             .catch(err => {
@@ -70,6 +80,7 @@ var controller = {
         Usuarios.findByIdAndUpdate(usuariosId, actualizar, { new: true })
             .then(usuarioActualizado => {
                 if (!usuarioActualizado) return res.status(404).send({ message: 'El usuario no existe, no se podrá actualizar' })
+                usuarioActualizado.contrasenia = undefined; // Ocultar contraseña
                 return res.status(200).send({ usuario: usuarioActualizado });
             })
             .catch(err => {
@@ -78,6 +89,70 @@ var controller = {
                 }
                 return res.status(500).send({ message: 'Error al recuperar datos', error: err });
             });
+    },
+
+    // Función de lógica para actualizar nombre, apellido y correo
+    actualizarDatos: async function (req, res) {
+        const usuarioId = req.params.id;
+        const { nombre, apellido, correo } = req.body; 
+        
+        try {
+            let usuario = await Usuarios.findById(usuarioId);
+            if (!usuario) {
+                return res.status(404).json({ message: 'Usuario no encontrado' });
+            }
+            
+            //cambios solo en los campos permitidos
+            if (nombre) usuario.nombre = nombre;
+            if (apellido) usuario.apellido = apellido;
+            if (correo) usuario.correo = correo;
+
+            const usuarioActualizado = await usuario.save(); 
+            usuarioActualizado.contrasenia = undefined; // Limpiar la respuesta
+
+            return res.status(200).send({ 
+                message: 'Datos actualizados correctamente',
+                usuario: usuarioActualizado
+            });
+            
+        } catch (error) {
+            console.error("ERROR ACTUALIZAR DATOS:", error);
+            return res.status(500).send({ message: 'Error al actualizar los datos', error });
+        }
+    },
+
+    // Función para cambiar la contraseña 
+    cambiarContrasena: async function (req, res) {
+        const usuarioId = req.params.id;
+        const { currentPassword, newPassword } = req.body;
+        
+        if (!currentPassword || !newPassword) {
+            return res.status(400).send({ message: 'Faltan la contraseña actual o la nueva contraseña.' });
+        }
+
+        try {
+            const usuario = await Usuarios.findById(usuarioId);
+            if (!usuario) {
+                return res.status(404).send({ message: 'Usuario no encontrado' });
+            }
+            
+            //Verificar la contraseña actual
+            const isMatch = await bcrypt.compare(currentPassword, usuario.contrasenia);
+            if (!isMatch) {
+                return res.status(400).send({ message: 'La contraseña actual es incorrecta' });
+            }
+
+            //Aplicar la nueva contraseña
+            usuario.contrasenia = newPassword; 
+            
+            await usuario.save(); 
+
+            return res.status(200).send({ message: 'Contraseña actualizada correctamente' });
+            
+        } catch (error) {
+            console.error("ERROR CAMBIAR CONTRASEÑA:", error);
+            return res.status(500).send({ message: 'Error al cambiar la contraseña', error });
+        }
     },
 
     deleteUsuarios: function (req, res) {
@@ -164,6 +239,7 @@ var controller = {
                 return res.status(400).send({ message: 'Correo no registrado' });
             }
 
+            // Usamos bcrypt.compare para verificar la contraseña hasheada
             const passwordCorrecta = await bcrypt.compare(contrasenia, usuario.contrasenia);
 
             if (!passwordCorrecta) {
@@ -179,6 +255,8 @@ var controller = {
                 "adriel",
                 { expiresIn: "4h" }
             );
+
+            usuario.contrasenia = undefined; 
 
             return res.status(200).send({
                 message: "login exitoso",
@@ -203,9 +281,9 @@ var controller = {
             if (!usuario) {
                 return res.status(400).send({ message: 'Correo no registrado' });
             }
-
-            const hash = await bcrypt.hash(nuevaContrasenia, 10);
-            usuario.contrasenia = hash;
+            
+            // Asignamos la nueva contraseña 
+            usuario.contrasenia = nuevaContrasenia; 
 
             await usuario.save();
 
