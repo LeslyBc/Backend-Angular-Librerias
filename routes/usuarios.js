@@ -19,8 +19,6 @@ router.post('/recuperar-contrasenia', usuariosController.recuperarContrasenia);
 router.put('/usuario/:id/datos', usuariosController.actualizarDatos); 
 
 // Ruta para CAMBIAR CONTRASEÑA 
-router.put('/usuario/:id/contrasena', usuariosController.cambiarContrasena); 
-// Ruta para Añadir o Quitar un libro de la lista de favoritos
-router.put('/usuario/:id/favorito', usuariosController.gestionarFavorito);
+router.put('/usuario/:id/contrasena', usuariosController.cambiarContrasena);
 
 module.exports = router;
