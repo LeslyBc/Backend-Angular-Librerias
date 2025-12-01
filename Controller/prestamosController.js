@@ -23,6 +23,25 @@ var controller = {
             })
     },
 
+    verPrestamosPorUsuario: async (req, res) => {
+        const usuarioId = req.params.id;
+
+        try {
+            const prestamos = await Prestamos.find({ usuario_id: usuarioId })
+                .populate('libros_id')
+                .exec();
+
+            if (!prestamos || prestamos.length === 0) {
+                return res.status(200).send({ prestamo: [], message: 'No se encontraron préstamos para este usuario' });
+            }
+            return res.status(200).send({ prestamo: prestamos });
+
+        } catch (err) {
+            console.error(err);
+            return res.status(500).send({ message: 'Error al obtener los préstamos del usuario', error: err });
+        }
+    },
+
     verPrestamo: function (req, res) {
         var prestamoId = req.params.id;
 
@@ -45,10 +64,13 @@ var controller = {
         var prestamo = new Prestamos();
         var params = req.body;
 
-        //Aquí voy asignar los datos
+        if (!params.usuario_id || !params.libros_id || !params.horasPrestamo) {
+            return res.status(400).send({ message: 'Faltan campos obligatorios para el préstamo' });
+        }
+
         prestamo.usuario_id = params.usuario_id;
         prestamo.libros_id = params.libros_id;
-        prestamo.descripcion = params.descripcion;
+        prestamo.descripcion = params.descripcion || "Solicitud de préstamo de usuario";
         prestamo.horasPrestamo = params.horasPrestamo
         prestamo.multa = params.multa;
 
@@ -56,7 +78,7 @@ var controller = {
             .then(prestamoGuardado => {
                 if (!prestamoGuardado)
                     return res.status(400).send({ message: 'No se pudo guardar el préstamo' });
-                //Tenemos que mostrar mediante el id para poder asignar el populate
+
                 return Prestamos.findById(prestamoGuardado._id)
                     .populate('usuario_id')
                     .populate('libros_id')

@@ -13,6 +13,9 @@ enrutador.get('/testPrestamos', PrestamosController.testPrestamo);
 // Ver todos los prestamos
 enrutador.get('/listaPrestamos', PrestamosController.listaPrestamos);
 
+//Ver prestamos por ID de usuario
+enrutador.get('/listaPrestamos/usuario/:id', PrestamosController.verPrestamosPorUsuario);
+
 //Ver prestamo en específico
 enrutador.get('/listaPrestamos/:id', PrestamosController.verPrestamo);
 
