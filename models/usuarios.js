@@ -10,6 +10,8 @@ var UsuariosSchema = Schema({
     correo: String,
     contrasenia: String, 
     imagen: String,
+    
+    favoritos: [{ type: Schema.Types.ObjectId, ref: 'Libros' }]
 });
 
 

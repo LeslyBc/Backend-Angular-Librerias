@@ -26,6 +26,34 @@ var controller = {
             });
     },
 
+    // Funcion que añade o quita un libro de la lista de favoritos del usuario
+    gestionarFavorito: async (req, res) => {
+        const usuarioId = req.params.id;
+        const { libroId } = req.body;
+
+        try {
+            let usuario = await Usuarios.findById(usuarioId);
+            if (!usuario) {
+                return res.status(404).json({ message: 'Usuario no encontrado' });
+            }
+
+            const index = usuario.favoritos.indexOf(libroId); 
+
+            if (index === -1) {
+                usuario.favoritos.push(libroId);
+                await usuario.save();
+                return res.status(200).json({ message: 'Libro añadido a favoritos', added: true });
+            } else {
+                usuario.favoritos.splice(index, 1);
+                await usuario.save();
+                return res.status(200).json({ message: 'Libro eliminado de favoritos', added: false });
+            }
+        } catch (error) {
+            console.error("ERROR GESTIONANDO FAVORITOS:", error);
+            res.status(500).json({ message: 'Error al gestionar favoritos', error });
+        }
+    },
+
     // Función para obtener datos del perfil
     verUsuario: function (req, res) {
         var usuarioId = req.params.id;
