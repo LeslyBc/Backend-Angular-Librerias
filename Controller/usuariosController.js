@@ -92,10 +92,11 @@ var controller = {
             });
     },
 
-    // Función de lógica para actualizar nombre, apellido y correo
+    // Función de lógica para actualizar nombre, apellido, correo y descripcion
     actualizarDatos: async function (req, res) {
         const usuarioId = req.params.id;
-        const { nombre, apellido, correo } = req.body; 
+        const { nombre, apellido, correo, descripcion } = req.body; 
+
         
         try {
             let usuario = await Usuarios.findById(usuarioId);
@@ -103,13 +104,13 @@ var controller = {
                 return res.status(404).json({ message: 'Usuario no encontrado' });
             }
             
-            //cambios solo en los campos permitidos
             if (nombre) usuario.nombre = nombre;
             if (apellido) usuario.apellido = apellido;
             if (correo) usuario.correo = correo;
-
+            if (descripcion !== undefined) usuario.descripcion = descripcion; 
+            
             const usuarioActualizado = await usuario.save(); 
-            usuarioActualizado.contrasenia = undefined; // Limpiar la respuesta
+            usuarioActualizado.contrasenia = undefined; 
 
             return res.status(200).send({ 
                 message: 'Datos actualizados correctamente',

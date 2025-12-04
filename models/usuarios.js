@@ -11,6 +11,7 @@ var UsuariosSchema = Schema({
     correo: String,
     contrasenia: String, 
     imagen: String,
+    descripcion: String,
     
     favoritos: [{
         type: mongoose.Schema.Types.ObjectId,
