@@ -124,74 +124,73 @@ var controller = {
 
     // 1. Añadir o Quitar un libro de favoritos
     toggleFavorito: async (req, res) => {
-        // Asumo que req.userId se obtiene del middleware de autenticación (auth.js)
-        const userId = req.userId; 
-        const { libroId } = req.params;
+        
+        const userId = req.usuario.id; 
+        const { libroId } = req.params;
 
-        if (!userId) {
-            return res.status(401).send({ message: 'No autenticado o ID de usuario no disponible.' });
-        }
+        if (!userId) {
+            // Esta línea solo se ejecutará si el token es válido pero no tiene un 'id' (es improbable)
+            return res.status(401).send({ message: 'No autenticado o ID de usuario no disponible.' });
+        }
 
-        try {
-            const usuario = await Usuarios.findById(userId);
+        try {
+            const usuario = await Usuarios.findById(userId);
 
-            if (!usuario) {
-                return res.status(404).send({ message: 'Usuario no encontrado.' });
-            }
+            if (!usuario) {
+                return res.status(404).send({ message: 'Usuario no encontrado.' });
+            }
 
-            const libroIdString = libroId.toString();
-            // Buscar si el libro ya está en el array de favoritos
-            const index = usuario.favoritos.findIndex(favId => favId.toString() === libroIdString);
-            
-            let isFavorite;
-            let message;
+            const libroIdString = libroId.toString();
+            // Buscar si el libro ya está en el array de favoritos
+            const index = usuario.favoritos.findIndex(favId => favId.toString() === libroIdString);
+            
+            let isFavorite;
+            let message;
 
-            if (index > -1) {
-                // El libro ya es favorito: Quitar
-                usuario.favoritos.splice(index, 1);
-                isFavorite = false;
-                message = 'Libro eliminado de favoritos.';
-            } else {
-                // El libro no es favorito: Añadir
-                usuario.favoritos.push(libroId);
-                isFavorite = true;
-                message = 'Libro añadido a favoritos.';
-            }
+            if (index > -1) {
+                usuario.favoritos.splice(index, 1);
+                isFavorite = false;
+                message = 'Libro eliminado de favoritos.';
+            } else {
+                usuario.favoritos.push(libroId);
+                isFavorite = true;
+                message = 'Libro añadido a favoritos.';
+            }
 
-            await usuario.save();
-            return res.status(200).send({ message, isFavorite });
+            await usuario.save();
+            return res.status(200).send({ message, isFavorite });
 
-        } catch (error) {
-            console.error("ERROR TOGGLE FAVORITO:", error);
-            res.status(500).send({ message: 'Error al actualizar favoritos.', error });
-        }
-    },
+        } catch (error) {
+            console.error("ERROR TOGGLE FAVORITO:", error);
+            res.status(500).send({ message: 'Error al actualizar favoritos.', error });
+        }
+    },
 
     // 2. Obtener la lista completa de libros favoritos (con datos del libro)
     getFavoritos: async (req, res) => {
-        // Asumo que req.userId se obtiene del middleware de autenticación (auth.js)
-        const userId = req.userId; 
 
-        if (!userId) {
-            return res.status(401).send({ message: 'No autenticado o ID de usuario no disponible.' });
-        }
+        const userId = req.usuario.id; 
 
-        try {
-            // Utilizamos .populate('favoritos') para obtener los documentos completos de los libros
-            const usuario = await Usuarios.findById(userId).populate('favoritos'); 
+        if (!userId) {
+            // Esta línea ya no debería ser alcanzada si auth.js funciona.
+            return res.status(401).send({ message: 'No autenticado o ID de usuario no disponible.' });
+        }
 
-            if (!usuario) {
-                return res.status(404).send({ message: 'Usuario no encontrado.' });
-            }
+        try {
+            // Utilizamos .populate('favoritos') para obtener los documentos completos de los libros
+            const usuario = await Usuarios.findById(userId).populate('favoritos'); 
 
-            // Excluimos datos innecesarios si es necesario, pero enviamos los libros
-            res.status(200).send(usuario.favoritos);
+            if (!usuario) {
+                return res.status(404).send({ message: 'Usuario no encontrado.' });
+            }
 
-        } catch (error) {
-            console.error("ERROR GET FAVORITOS:", error);
-            res.status(500).send({ message: 'Error al obtener favoritos.', error });
-        }
-    },
+            res.status(200).send(usuario.favoritos);
+
+        } catch (error) {
+            console.error("ERROR GET FAVORITOS:", error);
+            res.status(500).send({ message: 'Error al obtener favoritos.', error });
+        }
+    },
 
     // Función para cambiar la contraseña 
     cambiarContrasena: async function (req, res) {
