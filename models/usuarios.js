@@ -1,4 +1,5 @@
 'use strict'
+
 var mongoose = require('mongoose');
 var Schema = mongoose.Schema;
 const bcrypt = require('bcryptjs'); 
@@ -10,6 +11,11 @@ var UsuariosSchema = Schema({
     correo: String,
     contrasenia: String, 
     imagen: String,
+    
+    favoritos: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Libros' // Nombre del modelo de libros
+    }]
 });
 
 UsuariosSchema.pre('save', async function(next) {
