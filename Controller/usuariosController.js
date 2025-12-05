@@ -5,33 +5,18 @@ var path = require('path');
 var fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { match } = require('assert');
 
 var controller = {
 
-    home: (req, res) => res.status(200).send("<h1>Home Empleado</h1>"),
-
-    verUsuarios: function (req, res) {
-        Usuarios.find({}).sort().exec()
-            .then(usuario => {
-                if (!usuario || usuario.length === 0)
-                    return res.status(404).send({ message: 'No se encontaron usuarios' })
-                const usuariosSinContrasenia = usuario.map(u => {
-                    u.contrasenia = undefined; 
-                    return u;
-                });
-                return res.status(200).send({ usuario: usuariosSinContrasenia })
-            })
-            .catch(err => {
-                return res.status(500).send({ message: 'Error al obtener datos', error: err });
-            });
-    },
+    home: (req, res) => res.status(200).send("<h1>Home</h1>"),
 
 
-    // Función para obtener datos del perfil
+    // Función para obtener datos del perfil   3
     verUsuario: function (req, res) {
         var usuarioId = req.params.id;
 
-        Usuarios.findById(usuarioId).select('-contrasenia') // <-- CRÍTICO: Excluir contrasenia
+        Usuarios.findById(usuarioId)
             .then(usuario => {
                 if (!usuario) return res.status(404).send({ message: 'El usuario con esta ID no existe' })
                 return res.status(200).send({ usuario })
@@ -51,154 +36,117 @@ var controller = {
         usuario.nombre = params.nombre;
         usuario.apellido = params.apellido;
         usuario.cedula = params.cedula;
-        usuario.correo = params.correo ? params.correo.trim().toLowerCase() : null;
-
-        // Asignamos el valor de la contraseña
-        if (params.contrasenia) {
-            usuario.contrasenia = params.contrasenia.trim();
-        } else {
-             return res.status(400).send({ message: 'La contraseña es obligatoria' });
-        }
-        
+        usuario.correo = params.correo;
         usuario.imagen = null;
 
-        usuario.save()
-            .then(usuarioGuardado => {
-                if (!usuarioGuardado) return res.status(404).send({ message: 'No se ha guardado el usuario' })
-                // Ocultar contraseña
-                usuarioGuardado.contrasenia = undefined;
-                return res.status(200).send({ usuario: usuarioGuardado });
-            })
-            .catch(err => {
-                return res.status(500).send({ message: 'Error al guardar', error: err });
-            });
+        if (params.contrasenia) {
+            usuario.contrasenia = await bcrypt.hash(params.contrasenia, 10);
+        }
+
+        usuario.save() //Guarda el nuevo doc en la base de datos
+            .then(usuarioGuardado => res.status(200).send({ usuario: usuarioGuardado })) //si se guarda bien, dará un code 200 y devolverá el usuario guardado
+            .catch(err => res.status(500).send({ message: 'Error al guardar', error: err })); //error de código interno
     },
 
-    actualizarUsuario: function (req, res) {
-        var usuariosId = req.params.id
-        var actualizar = req.body;
-
-        Usuarios.findByIdAndUpdate(usuariosId, actualizar, { new: true })
-            .then(usuarioActualizado => {
-                if (!usuarioActualizado) return res.status(404).send({ message: 'El usuario no existe, no se podrá actualizar' })
-                usuarioActualizado.contrasenia = undefined; // Ocultar contraseña
-                return res.status(200).send({ usuario: usuarioActualizado });
-            })
-            .catch(err => {
-                if (err.name === 'CastError') {
-                    return res.status(404).send({ message: 'El ID no es válido o está incorrecto' });
-                }
-                return res.status(500).send({ message: 'Error al recuperar datos', error: err });
-            });
-    },
 
     // Función de lógica para actualizar nombre, apellido, correo y descripcion
     actualizarDatos: async function (req, res) {
-        const usuarioId = req.params.id;
-        const { nombre, apellido, correo, descripcion } = req.body; 
+        var usuarioId = req.params.id;
+        var { nombre, apellido, correo, descripcion } = req.body;
 
-        
         try {
             let usuario = await Usuarios.findById(usuarioId);
             if (!usuario) {
                 return res.status(404).json({ message: 'Usuario no encontrado' });
             }
-            
+
             if (nombre) usuario.nombre = nombre;
             if (apellido) usuario.apellido = apellido;
             if (correo) usuario.correo = correo;
-            if (descripcion !== undefined) usuario.descripcion = descripcion; 
-            
-            const usuarioActualizado = await usuario.save(); 
-            usuarioActualizado.contrasenia = undefined; 
+            if (descripcion !== undefined) usuario.descripcion = descripcion;
 
-            return res.status(200).send({ 
+            const usuarioActualizado = await usuario.save();
+            usuarioActualizado.contrasenia = undefined;
+
+            return res.status(200).send({
                 message: 'Datos actualizados correctamente',
                 usuario: usuarioActualizado
             });
-            
+
         } catch (error) {
             console.error("ERROR ACTUALIZAR DATOS:", error);
             return res.status(500).send({ message: 'Error al actualizar los datos', error });
         }
     },
 
-    // 1. Añadir o Quitar un libro de favoritos
-    toggleFavorito: async (req, res) => {
-        
-        const userId = req.usuario.id; 
-        const { libroId } = req.params;
+    toggleFavorito: function (req, res) {
+        var userId = req.usuario.id;
+        var libroId = req.params.libroId;
 
-        if (!userId) {
-            // Esta línea solo se ejecutará si el token es válido pero no tiene un 'id' (es improbable)
-            return res.status(401).send({ message: 'No autenticado o ID de usuario no disponible.' });
-        }
+        Usuarios.findById(userId)
+            .then(usuario => {
+                if (!usuario) {
+                    return res.status(404).send({ message: 'Usuario no encontrado' });
+                }
 
-        try {
-            const usuario = await Usuarios.findById(userId);
+                var esFavorito = usuario.favoritos_id.includes(libroId);
+                var updateQuery, mensaje;
 
-            if (!usuario) {
-                return res.status(404).send({ message: 'Usuario no encontrado.' });
-            }
+                if (esFavorito) {
+                    updateQuery = { $pull: { favoritos_id: libroId } };
+                    mensaje = 'Libro eliminado de favoritos';
+                } else {
+                    updateQuery = { $addToSet: { favoritos_id: libroId } };
+                    mensaje = 'Libro añadido a favoritos';
+                }
 
-            const libroIdString = libroId.toString();
-            // Buscar si el libro ya está en el array de favoritos
-            const index = usuario.favoritos.findIndex(favId => favId.toString() === libroIdString);
-            
-            let isFavorite;
-            let message;
+                return Usuarios.findByIdAndUpdate(userId, updateQuery, { new: true })
+                    .then(usuarioActualizado => {
+                        if (!usuarioActualizado)
+                            return res.status(400).send({ message: 'No se pudo actualizar el usuario' })
 
-            if (index > -1) {
-                usuario.favoritos.splice(index, 1);
-                isFavorite = false;
-                message = 'Libro eliminado de favoritos.';
-            } else {
-                usuario.favoritos.push(libroId);
-                isFavorite = true;
-                message = 'Libro añadido a favoritos.';
-            }
+                        return res.status(200).send({message: mensaje, usuario: usuarioActualizado})
+                    });
+            })
+            .catch(err => {
+                if (err.name === 'CastError') {
+                    return res.status(404).send({ message: 'ID de usuario o libro inválido' });
+                }
+                return res.status(500).send({ message: 'Error al procesar la solicitud', error: err });
+            });
+    },
 
-            await usuario.save();
-            return res.status(200).send({ message, isFavorite });
 
-        } catch (error) {
-            console.error("ERROR TOGGLE FAVORITO:", error);
-            res.status(500).send({ message: 'Error al actualizar favoritos.', error });
-        }
-    },
 
-    // 2. Obtener la lista completa de libros favoritos (con datos del libro)
-    getFavoritos: async (req, res) => {
+    //Obtener la lista completa de libros favoritos (con datos del libro)
+    verFavoritos: function (req, res) {
+        var userId = req.usuario.id;
 
-        const userId = req.usuario.id; 
+        Usuarios.findById(userId)
+        .populate('favoritos_id')
+        .then(usuario => {
+            if (!usuario) {
+                return res.status(404).send({ message: 'Usuario no encontrado.' });
+            }
+            return res.status(200).send(usuario.favoritos_id);
 
-        if (!userId) {
-            // Esta línea ya no debería ser alcanzada si auth.js funciona.
-            return res.status(401).send({ message: 'No autenticado o ID de usuario no disponible.' });
-        }
+        })
+        .catch(err => {
+            if (err.name === 'CastError') {
+                return res.status(404).send({ message: 'El ID de usuario es incorrecto' });
+            }
+            return res.status(500).send({ message: 'Error al obtener la lista de favoritos.', error: err });
+        });
+},
 
-        try {
-            // Utilizamos .populate('favoritos') para obtener los documentos completos de los libros
-            const usuario = await Usuarios.findById(userId).populate('favoritos'); 
 
-            if (!usuario) {
-                return res.status(404).send({ message: 'Usuario no encontrado.' });
-            }
-
-            res.status(200).send(usuario.favoritos);
-
-        } catch (error) {
-            console.error("ERROR GET FAVORITOS:", error);
-            res.status(500).send({ message: 'Error al obtener favoritos.', error });
-        }
-    },
 
     // Función para cambiar la contraseña 
-    cambiarContrasena: async function (req, res) {
+    cambiarContrasenia: async function (req, res) {
         const usuarioId = req.params.id;
-        const { currentPassword, newPassword } = req.body;
-        
-        if (!currentPassword || !newPassword) {
+        const { contraseniaActual, nuevaContrasenia } = req.body;
+
+        if (!contraseniaActual || !nuevaContrasenia) {
             return res.status(400).send({ message: 'Faltan la contraseña actual o la nueva contraseña.' });
         }
 
@@ -207,39 +155,24 @@ var controller = {
             if (!usuario) {
                 return res.status(404).send({ message: 'Usuario no encontrado' });
             }
-            
+
             //Verificar la contraseña actual
-            const isMatch = await bcrypt.compare(currentPassword, usuario.contrasenia);
+            const isMatch = await bcrypt.compare(contraseniaActual, usuario.contrasenia);
             if (!isMatch) {
                 return res.status(400).send({ message: 'La contraseña actual es incorrecta' });
             }
 
             //Aplicar la nueva contraseña
-            usuario.contrasenia = newPassword; 
-            
-            await usuario.save(); 
+            usuario.contrasenia = nuevaContrasenia;
+
+            await usuario.save();
 
             return res.status(200).send({ message: 'Contraseña actualizada correctamente' });
-            
+
         } catch (error) {
             console.error("ERROR CAMBIAR CONTRASEÑA:", error);
             return res.status(500).send({ message: 'Error al cambiar la contraseña', error });
         }
-    },
-
-    deleteUsuarios: function (req, res) {
-        var usuarioId = req.params.id;
-        Usuarios.findByIdAndDelete(usuarioId)
-            .then(usuarioEliminado => {
-                if (!usuarioEliminado) return res.status(400).send({ message: 'no se puede eliminar un usuario que no existe' });
-                return res.status(200).send({ usuario: usuarioEliminado, message: 'Usuario eliminado con satisfacción' })
-            })
-            .catch(err => {
-                if (err.name === 'CastError') {
-                    return res.status(404).send({ message: 'El Id no es válido' })
-                }
-                return res.status(500).send({ message: 'Error al recuperar datos', error: err });
-            });
     },
 
     cargarImagenUsuario: function (req, res) {
@@ -327,9 +260,7 @@ var controller = {
                 "adriel",
                 { expiresIn: "4h" }
             );
-
-            usuario.contrasenia = undefined; 
-
+            
             return res.status(200).send({
                 message: "login exitoso",
                 token,
@@ -353,9 +284,9 @@ var controller = {
             if (!usuario) {
                 return res.status(400).send({ message: 'Correo no registrado' });
             }
-            
+
             // Asignamos la nueva contraseña 
-            usuario.contrasenia = nuevaContrasenia; 
+            usuario.contrasenia = nuevaContrasenia;
 
             await usuario.save();
 

@@ -11,7 +11,8 @@ var LibrosSchema = Schema({
     idioma: String,
     cantidad_disponible: Number,
     autor: String,
-    ubicacion: String
+    ubicacion: String,
+    favorito: {type: Boolean, default: false}
 });
 
 module.exports = mongoose.model('Libros', LibrosSchema);
